@@ -34,7 +34,7 @@ export function AssetsPanel({ delivery, kind }: { delivery: Delivery; kind: "scr
   const qc = useQueryClient();
   const toast = useToast();
   const refresh = () => qc.invalidateQueries({ queryKey: keys.assets(delivery.id) });
-  const locked = delivery.status === "revoked";
+  const locked = delivery.status === "archived";
   const c = COPY[kind];
 
   const onFiles = async (files: FileList | null) => {

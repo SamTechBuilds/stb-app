@@ -7,3 +7,8 @@ dist/
 !.env.e2e
 test-results/
 playwright-report/
+
+# Android signing keys: never commit
+*.jks
+*.keystore
+keystore.properties

@@ -3,7 +3,8 @@ on:
   push:
   pull_request:
 jobs:
-  test:
+  web:
+    name: STB Website (tests + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,3 +16,24 @@ jobs:
       - run: npm run build
       - run: npx playwright test
         env: { PW_CHANNEL: chrome }
+
+  android-debug:
+    name: Android app (debug build, no secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21, cache: gradle }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npx vite build
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder
+          VITE_DELIVERY_SITE_URL: https://delivery.example
+      - run: npx cap sync android
+      - run: ./gradlew assembleDebug --no-daemon
+        working-directory: android
+      - run: ls -la android/app/build/outputs/apk/debug/

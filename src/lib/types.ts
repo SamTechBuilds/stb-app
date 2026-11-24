@@ -44,7 +44,7 @@ export interface SupportPeriod {
   terms: string | null;
 }
 
-export type DeliveryStatus = "draft" | "published" | "revoked";
+export type DeliveryStatus = "draft" | "published" | "archived";
 export type Theme = "midnight" | "aurora" | "ivory";
 
 export interface ChecklistItem {
@@ -72,7 +72,7 @@ export interface Delivery {
   handover_checklist: ChecklistItem[];
   closing_message: string | null;
   published_at: string | null;
-  revoked_at: string | null;
+  archived_at: string | null;
   first_opened_at: string | null;
   last_opened_at: string | null;
   open_count: number;

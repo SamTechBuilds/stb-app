@@ -80,15 +80,24 @@ function respond(route: Route, accept: string, data: Row[] | Row | null, status 
 const DEFAULTS: Record<string, () => Row> = {
   clients: () => ({ status: "active", business_name: null, email: null, phone: null, address: null, notes: null }),
   projects: () => ({ status: "in_progress", tech_stack: [], category: null, description: null, live_url: null, internal_notes: null, start_date: null, due_date: null, completed_on: null }),
-  deliveries: () => ({ status: "draft", open_count: 0, published_at: null, revoked_at: null, first_opened_at: null, last_opened_at: null, handover_checklist: [] }),
+  deliveries: () => ({ status: "draft", open_count: 0, published_at: null, archived_at: null, first_opened_at: null, last_opened_at: null, handover_checklist: [] }),
   delivery_assets: () => ({ is_published: true, description: null, sort_order: 0 }),
 };
 
-export async function installMock(page: Page, db: MockDb) {
-  await page.addInitScript((s) => localStorage.setItem("stb-app-auth", s), sessionJson());
+export const STUB_PASSWORD = "stub-password-1";
+
+export async function installMock(page: Page, db: MockDb, opts: { seeded?: boolean } = { seeded: true }) {
+  if (opts.seeded !== false) await page.addInitScript((s) => localStorage.setItem("stb-app-auth", s), sessionJson());
 
   await page.route(`${SUPA}/auth/v1/**`, (route) => {
     const url = route.request().url();
+    if (url.includes("/token?grant_type=password")) {
+      const body = JSON.parse(route.request().postData() ?? "{}");
+      if (body.email !== OWNER.email || body.password !== STUB_PASSWORD) {
+        return route.fulfill({ status: 400, json: { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" } });
+      }
+      return route.fulfill({ json: JSON.parse(sessionJson()) });
+    }
     if (url.includes("/user")) return route.fulfill({ json: JSON.parse(sessionJson()).user });
     if (url.includes("/factors")) return route.fulfill({ json: { all: [], totp: [], phone: [] } });
     return route.fulfill({ status: 204, body: "" });
@@ -108,8 +117,8 @@ export async function installMock(page: Page, db: MockDb) {
       const d = db.tables.deliveries.find((x) => x.id === args.p_delivery_id)!;
       d.status = args.p_status;
       if (args.p_status === "published") d.published_at = now();
-      d.revoked_at = args.p_status === "revoked" ? now() : null;
-      if (args.p_status === "revoked") db.tables.delivery_tokens.filter((t) => t.delivery_id === d.id).forEach((t) => (t.revoked_at ??= now()));
+      // Archive is reversible and leaves private links alone, as in the STB Core migration.
+      d.archived_at = args.p_status === "archived" ? now() : null;
       return route.fulfill({ json: args.p_status });
     }
     if (fn === "revoke_delivery_token") {

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createLink, deleteDelivery, getDelivery, keys, listSupport, setDeliveryStatus, updateDelivery } from "../../lib/api";
 import { deliverySiteUrl, friendlyError } from "../../lib/supabase";
 import { deliveryLink } from "../../lib/security";
+import { isNative, openExternal } from "../../lib/platform";
 import { isHttps, joinList, nullify, splitList } from "../../lib/forms";
 import type { ChecklistItem, Delivery, DeliveryContent, DeliveryStatus, Theme } from "../../lib/types";
 import { Badge, Button, Confirm, ErrorNote, Field, Loading, PageHeader, Panel, fmtDate, fmtDateTime, relTime, useToast } from "../../components/ui";
@@ -45,7 +46,7 @@ const THEMES: { value: Theme; label: string; wrap: string; ribbon: string }[] = 
 function Editor({ delivery: d }: { delivery: Delivery }) {
   const initial = useMemo(() => toForm(d), [d]);
   const [f, setF] = useState<Form>(initial);
-  const [confirm, setConfirm] = useState<null | "publish" | "unpublish" | "revoke" | "reinstate" | "delete">(null);
+  const [confirm, setConfirm] = useState<null | "publish" | "unpublish" | "archive" | "reinstate" | "delete">(null);
   const qc = useQueryClient();
   const nav = useNavigate();
   const toast = useToast();
@@ -89,7 +90,7 @@ function Editor({ delivery: d }: { delivery: Delivery }) {
     mutationFn: (s: DeliveryStatus) => setDeliveryStatus(d.id, s),
     onSuccess: (s) => {
       setConfirm(null);
-      toast({ published: "Published", draft: "Moved to draft", revoked: "Revoked: all links stopped working" }[s]);
+      toast({ published: "Published", draft: "Moved to draft", archived: "Archived. Links are kept, but clients can't open the page" }[s]);
       refresh();
       qc.invalidateQueries({ queryKey: keys.tokens(d.id) });
     },
@@ -104,11 +105,14 @@ function Editor({ delivery: d }: { delivery: Delivery }) {
 
   const preview = async () => {
     if (!deliverySiteUrl) { toast("Set VITE_DELIVERY_SITE_URL to preview.", "bad"); return; }
-    const win = window.open("about:blank", "_blank"); // open now, so the popup isn't blocked
+    // Web: open the tab now so the popup isn't blocked. Android: open a Chrome Custom Tab afterwards.
+    const win = isNative ? null : window.open("about:blank", "_blank");
     try {
       const token = await createLink(d.id, "preview", "Preview", null);
       qc.invalidateQueries({ queryKey: keys.tokens(d.id) });
-      if (win) { win.opener = null; win.location.href = deliveryLink(deliverySiteUrl, token); }
+      const url = deliveryLink(deliverySiteUrl, token);
+      if (isNative) await openExternal(url);
+      else if (win) { win.opener = null; win.location.href = url; }
     } catch (e) {
       win?.close();
       toast(friendlyError(e), "bad");
@@ -124,7 +128,7 @@ function Editor({ delivery: d }: { delivery: Delivery }) {
   const setItem = (i: number, patch: Partial<ChecklistItem>) =>
     setF({ ...f, handover_checklist: f.handover_checklist.map((it, j) => (j === i ? { ...it, ...patch } : it)) });
 
-  const isRevoked = d.status === "revoked";
+  const isArchived = d.status === "archived";
   const st = STATUS[d.status];
 
   return (
@@ -136,10 +140,12 @@ function Editor({ delivery: d }: { delivery: Delivery }) {
         actions={
           <>
             <Badge tone={st.tone}>{st.label}</Badge>
-            {!isRevoked && <Button onClick={preview}>Preview</Button>}
+            {!isArchived && <Button onClick={preview}>Preview</Button>}
+            {deliverySiteUrl && <a className="btn" href={`${deliverySiteUrl}/admin/deliveries/${d.id}`} target="_blank" rel="noopener noreferrer">Open in STB Delivery</a>}
             {d.status === "draft" && <Button variant="primary" onClick={() => setConfirm("publish")} disabled={dirty} title={dirty ? "Save your changes first" : undefined}>Publish</Button>}
             {d.status === "published" && <Button onClick={() => setConfirm("unpublish")}>Unpublish</Button>}
-            {isRevoked && <Button onClick={() => setConfirm("reinstate")}>Move back to draft</Button>}
+            {d.status !== "archived" && <Button onClick={() => setConfirm("archive")}>Archive</Button>}
+            {isArchived && <Button onClick={() => setConfirm("reinstate")}>Restore to draft</Button>}
           </>
         }
       />
@@ -151,11 +157,11 @@ function Editor({ delivery: d }: { delivery: Delivery }) {
         <div><dt>Published</dt><dd>{d.published_at ? fmtDate(d.published_at) : "No"}</dd></div>
       </dl>
 
-      {isRevoked && <p className="banner banner--bad">Revoked on {fmtDate(d.revoked_at)}. Every link to this delivery has stopped working. Move it back to draft to edit it and create new links.</p>}
+      {isArchived && <p className="banner">Archived on {fmtDate(d.archived_at)}. Clients can't open this page while it is archived. Its links are kept, and they work again once you restore it and publish.</p>}
       {d.status === "published" && <p className="banner banner--good">Live. Anyone holding a client link can open it. Edits you save appear immediately.</p>}
 
       <form id="delivery-form" className="form-grid" onSubmit={(e) => { e.preventDefault(); if (canSave) save.mutate(); }}>
-        <fieldset disabled={isRevoked} className="fieldset-reset">
+        <fieldset disabled={isArchived} className="fieldset-reset">
           <Panel title="Welcome" description="The first screen: a gift tag with the client's name over a wrapped box.">
             <div className="fields">
               <Field label="Name on the gift tag" hint="Usually the client's first name.">
@@ -240,12 +246,7 @@ function Editor({ delivery: d }: { delivery: Delivery }) {
 
       <Panel title="Danger zone">
         <div className="danger-row">
-          {!isRevoked && (
-            <div>
-              <p><strong>Revoke delivery.</strong> Every link stops working at once. Use this if a link was shared by mistake.</p>
-              <Button variant="danger" onClick={() => setConfirm("revoke")}>Revoke delivery</Button>
-            </div>
-          )}
+          <p className="muted">To stop one shared link, revoke it under Links. Archiving keeps all links.</p>
           {d.status !== "published" && d.open_count === 0 && (
             <div>
               <p><strong>Delete delivery.</strong> Removes the page and its uploaded files.</p>
@@ -261,11 +262,11 @@ function Editor({ delivery: d }: { delivery: Delivery }) {
       <Confirm open={confirm === "unpublish"} title="Unpublish?" confirmLabel="Unpublish" busy={status.isPending}
         body={<p>Client links will show "This link isn't active" until you publish again. Links themselves keep working after republishing.</p>}
         onConfirm={() => status.mutate("draft")} onCancel={() => setConfirm(null)} />
-      <Confirm open={confirm === "revoke"} title="Revoke this delivery?" tone="danger" confirmLabel="Revoke delivery" busy={status.isPending}
-        body={<p>All links stop working permanently. To share it again you'll need to move it back to draft, publish, and send new links.</p>}
-        onConfirm={() => status.mutate("revoked")} onCancel={() => setConfirm(null)} />
-      <Confirm open={confirm === "reinstate"} title="Move back to draft?" confirmLabel="Move to draft" busy={status.isPending}
-        body={<p>You can edit and publish it again. Old links stay dead; create new ones after publishing.</p>}
+      <Confirm open={confirm === "archive"} title="Archive this delivery?" confirmLabel="Archive" busy={status.isPending}
+        body={<p>Clients can't open the page while it is archived. Their links are kept, not revoked, and work again after you restore and publish. To stop a single link, use Revoke on that link.</p>}
+        onConfirm={() => status.mutate("archived")} onCancel={() => setConfirm(null)} />
+      <Confirm open={confirm === "reinstate"} title="Restore to draft?" confirmLabel="Restore to draft" busy={status.isPending}
+        body={<p>You can edit and publish it again. Existing links work again once it is published, unless you revoked them.</p>}
         onConfirm={() => status.mutate("draft")} onCancel={() => setConfirm(null)} />
       <Confirm open={confirm === "delete"} title="Delete this delivery?" tone="danger" confirmLabel="Delete" busy={del.isPending}
         body={<p>The page, its links and its uploaded files are removed. This can't be undone.</p>}

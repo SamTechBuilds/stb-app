@@ -6,6 +6,7 @@ import { isEmail, isHttps, joinList, nullify, splitList } from "../../lib/forms"
 import type { BusinessProfile } from "../../lib/types";
 import { Button, ErrorNote, Field, Loading, PageHeader, Panel, useToast } from "../../components/ui";
 import { ThemeToggle } from "../../components/theme";
+import { appInfo } from "../../lib/platform";
 
 export function Settings() {
   const q = useQuery({ queryKey: keys.profile, queryFn: getProfile });
@@ -17,6 +18,7 @@ export function Settings() {
       {q.data && <ProfileForm profile={q.data} />}
       <Security />
       <Panel title="Appearance"><ThemeToggle /></Panel>
+      <About />
     </>
   );
 }
@@ -125,6 +127,16 @@ function Security() {
       ) : (
         <Button variant="primary" onClick={start} busy={busy}>Set up two-factor sign-in</Button>
       )}
+    </Panel>
+  );
+}
+
+function About() {
+  const info = useQuery({ queryKey: ["app-info"], queryFn: appInfo, staleTime: Infinity });
+  return (
+    <Panel title="About this app">
+      <p>{info.data ? `${info.data.label}, version ${info.data.version}` : "…"}</p>
+      <p className="muted">The STB Website and the Android app share one codebase and one STB Core account.</p>
     </Panel>
   );
 }

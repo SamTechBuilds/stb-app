@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase, isConfigured } from "../../lib/supabase";
+import { authRedirectUrl } from "../../lib/platform";
 import { Button, Field } from "../../components/ui";
 import { useAuth } from "./AuthProvider";
 
@@ -42,7 +43,9 @@ export function LoginScreen() {
 
   const reset = async () => {
     if (!email.trim()) { setError("Enter your email first, then choose Reset password."); return; }
-    await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: window.location.origin + "/settings" });
+    const redirectTo = authRedirectUrl("/settings");
+    if (!redirectTo) { setError("Password reset isn't set up for this app build. Reset it on the STB Website."); return; }
+    await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo });
     setResetSent(true);
     setError(null);
   };

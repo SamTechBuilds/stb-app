@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createLink, keys, listTokens, revokeLink } from "../../lib/api";
 import { deliverySiteUrl, friendlyError } from "../../lib/supabase";
 import { deliveryLink } from "../../lib/security";
+import { canShare, copyText, shareLink } from "../../lib/platform";
 import type { Delivery, DeliveryToken } from "../../lib/types";
 import { Badge, Button, Confirm, Field, Loading, Panel, fmtDate, relTime, useToast } from "../../components/ui";
 
@@ -53,8 +54,8 @@ export function LinksPanel({ delivery }: { delivery: Delivery }) {
   return (
     <Panel title="Client links" id="links"
       description="Each link is a private key to this page. It's shown once when created; STB Core keeps only a fingerprint of it, so it can't be shown again.">
-      {delivery.status === "revoked" ? (
-        <p className="muted">This delivery is revoked. Move it back to draft and publish to create new links.</p>
+      {delivery.status === "archived" ? (
+        <p className="muted">This delivery is archived. Links are kept but do not open until you restore it to draft and publish it.</p>
       ) : (
         <form className="link-create" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
           <Field label="Label (only you see it)">
@@ -112,12 +113,8 @@ function NewLink({ url, onDone }: { url: string; onDone: () => void }) {
   useEffect(() => {
     QRCode.toDataURL(url, { margin: 1, width: 320 }).then(setQr).catch(() => setQr(null));
   }, [url]);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(url); setCopied(true); } catch { setCopied(false); }
-  };
-  const share = async () => {
-    try { await navigator.share?.({ title: "Your project delivery", url }); } catch { /* cancelled */ }
-  };
+  const copy = async () => setCopied(await copyText(url));
+  const share = () => shareLink({ title: "Your project delivery", text: "Here's your project, ready for you:", url });
   return (
     <div className="new-link" role="region" aria-label="New client link">
       <div>
@@ -126,7 +123,7 @@ function NewLink({ url, onDone }: { url: string; onDone: () => void }) {
         <input className="new-link__url mono" readOnly value={url} onFocus={(e) => e.currentTarget.select()} aria-label="Client link" />
         <div className="row-actions">
           <Button variant="primary" onClick={copy}>{copied ? "Copied" : "Copy link"}</Button>
-          {"share" in navigator && <Button onClick={share}>Share</Button>}
+          {canShare() && <Button onClick={share}>Share</Button>}
           <Button variant="ghost" onClick={onDone}>Done</Button>
         </div>
       </div>

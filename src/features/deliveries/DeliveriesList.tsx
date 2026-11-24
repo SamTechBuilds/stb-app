@@ -9,7 +9,7 @@ import { Badge, Button, Empty, ErrorNote, Field, Loading, PageHeader, Panel, rel
 export const STATUS: Record<DeliveryStatus, { label: string; tone: "neutral" | "good" | "bad" }> = {
   draft: { label: "Draft", tone: "neutral" },
   published: { label: "Published", tone: "good" },
-  revoked: { label: "Revoked", tone: "bad" },
+  archived: { label: "Archived", tone: "neutral" },
 };
 
 export function DeliveriesList() {

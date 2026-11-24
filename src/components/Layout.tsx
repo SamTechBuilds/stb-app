@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { registerBackButton, watchConnectivity } from "../lib/platform";
 import { useAuth } from "../features/auth/AuthProvider";
 import { ThemeToggle } from "./theme";
 
@@ -20,6 +22,14 @@ function Icon({ d }: { d: string }) {
 
 export function Layout() {
   const { state, signOut } = useAuth();
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    let undoBack = () => {};
+    let undoNet = () => {};
+    registerBackButton().then((u) => (undoBack = u));
+    watchConnectivity(setOnline).then((u) => (undoNet = u));
+    return () => { undoBack(); undoNet(); };
+  }, []);
   const email = state.kind === "authorized" ? state.email : "";
   return (
     <div className="shell">
@@ -45,6 +55,7 @@ export function Layout() {
         <p className="sidebar__brand">STB</p>
         <ThemeToggle compact />
       </header>
+      {!online && <p className="offline-bar" role="status">You're offline. Changes can't be saved until you reconnect.</p>}
       <main id="main" className="main" tabIndex={-1}>
         <Outlet />
       </main>

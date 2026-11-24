@@ -1,0 +1,86 @@
+apply plugin: 'com.android.application'
+
+// Release signing comes ONLY from environment variables (CI secrets or your shell). No key or
+// password is ever stored in this repository. See docs/ANDROID.md.
+def env = System.getenv()
+def keystorePath = env['STB_KEYSTORE_PATH']
+def hasSigning = keystorePath && file(keystorePath).exists() &&
+        env['STB_KEYSTORE_PASSWORD'] && env['STB_KEY_ALIAS'] && env['STB_KEY_PASSWORD']
+def wantsRelease = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
+if (wantsRelease && !hasSigning) {
+    throw new GradleException("Release builds must be signed. Set STB_KEYSTORE_PATH, STB_KEYSTORE_PASSWORD, " +
+            "STB_KEY_ALIAS and STB_KEY_PASSWORD (see docs/ANDROID.md).")
+}
+
+android {
+    namespace = "com.samtechbuilds.stbapp"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.samtechbuilds.stbapp"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // Bump STB_VERSION_CODE for every APK you distribute; Android refuses to update to a lower code.
+        versionCode((env['STB_VERSION_CODE'] ?: '1') as int)
+        versionName(env['STB_VERSION_NAME'] ?: '0.1.0')
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (hasSigning) {
+            release {
+                storeFile file(keystorePath)
+                storePassword env['STB_KEYSTORE_PASSWORD']
+                keyAlias env['STB_KEY_ALIAS']
+                keyPassword env['STB_KEY_PASSWORD']
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            if (hasSigning) signingConfig signingConfigs.release
+            debuggable false
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

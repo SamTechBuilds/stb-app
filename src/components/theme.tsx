@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { setNativeStatusBar } from "../lib/platform";
 
 export type ColorMode = "light" | "dark" | "system";
 const KEY = "stb-app-color-mode";
@@ -16,6 +17,7 @@ export function applyMode(mode: ColorMode) {
   const dark = mode === "dark" || (mode === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.mode = dark ? "dark" : "light";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#12151C" : "#F6F7F9");
+  void setNativeStatusBar(!!dark);
 }
 
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {

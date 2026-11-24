@@ -147,7 +147,7 @@ function ProjectForm({ id, initial }: { id: string | null; initial: FormState })
           <ul className="list list--plain">
             {theirDeliveries.map((d) => (
               <li key={d.id}><Link className="list__row" to={`/deliveries/${d.id}`}>
-                <span className="list__title">{d.project_title}</span><Badge tone={d.status === "published" ? "good" : d.status === "revoked" ? "bad" : "neutral"}>{d.status}</Badge>
+                <span className="list__title">{d.project_title}</span><Badge tone={d.status === "published" ? "good" : "neutral"}>{d.status}</Badge>
               </Link></li>
             ))}
           </ul>
